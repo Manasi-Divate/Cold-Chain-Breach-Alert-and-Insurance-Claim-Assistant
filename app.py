@@ -13,6 +13,7 @@ from utils.llm_service import (
 )
 from utils.report_generator import generate_fda_report
 from utils.insurance_generator import generate_insurance_claim
+from utils.docx_generator import save_docx
 from utils.visualizer import (
     temperature_graph,
     humidity_graph,
@@ -131,27 +132,31 @@ if uploaded_file is not None:
                         )
 
                     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                    fda_file = report_dir / f'FDA_Report_{timestamp}.txt'
-                    claim_file = report_dir / f'Insurance_Claim_{timestamp}.txt'
-                    fda_file.write_text(fda_report, encoding='utf-8')
-                    claim_file.write_text(insurance_claim, encoding='utf-8')
+                    fda_file = report_dir / f'FDA_Report_{timestamp}.docx'
+                    claim_file = report_dir / f'Insurance_Claim_{timestamp}.docx'
+                    
+                    save_docx(fda_report, str(fda_file))
+                    save_docx(insurance_claim, str(claim_file))
+
+                    fda_bytes = fda_file.read_bytes()
+                    claim_bytes = claim_file.read_bytes()
 
                     st.subheader('Download Reports')
                     col1, col2 = st.columns(2)
                     with col1:
                         st.download_button(
                             'Download FDA Report',
-                            fda_report,
+                            fda_bytes,
                             file_name=fda_file.name,
-                            mime='text/plain',
+                            mime='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
                             use_container_width=True,
                         )
                     with col2:
                         st.download_button(
                             'Download Insurance Claim',
-                            insurance_claim,
+                            claim_bytes,
                             file_name=claim_file.name,
-                            mime='text/plain',
+                            mime='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
                             use_container_width=True,
                         )
 
