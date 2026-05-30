@@ -1,9 +1,13 @@
 ﻿import streamlit as st
 import pandas as pd
+from datetime import datetime
+from pathlib import Path
 
 from utils.data_loader import load_data, validate_columns, prepare_timestamp
 from utils.data_cleaner import clean_data, create_features, get_summary
 from utils.breach_detector import detect_excursions, get_excursion_statistics
+from utils.report_generator import generate_fda_report
+from utils.insurance_generator import generate_insurance_claim
 from utils.visualizer import (
     temperature_graph,
     humidity_graph,
@@ -34,63 +38,106 @@ uploaded_file = st.file_uploader(
 )
 
 if uploaded_file is not None:
-    try:
-        df = load_data(uploaded_file)
-        missing_columns = validate_columns(df)
+    st.success('File uploaded successfully. Click Analyze to begin breach and claim analysis.')
+    analyze_clicked = st.button('Analyze Dataset')
 
-        if missing_columns:
-            st.error(
-                f'Missing required dataset columns: {", ".join(missing_columns)}'
-            )
-        else:
-            df = prepare_timestamp(df)
-            df = clean_data(df)
-            df = create_features(df)
+    if analyze_clicked:
+        try:
+            df = load_data(uploaded_file)
+            missing_columns = validate_columns(df)
 
-            summary = get_summary(df)
-            excursions = detect_excursions(df)
-            stats = get_excursion_statistics(excursions)
-            excursion_df = pd.DataFrame(excursions)
-
-            st.header('📊 Dataset Summary')
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric('Records', summary['records'])
-            c2.metric('Average Temp', f"{summary['avg_temp']} °C")
-            c3.metric('Average Humidity', f"{summary['avg_humidity']} %")
-            c4.metric('Average Health Index', summary['avg_health'])
-
-            st.header('🚨 Breach Dashboard')
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric('Total Excursions', stats['total_excursions'])
-            c2.metric('Average Duration', f"{stats['avg_duration']} min")
-            c3.metric('Longest Duration', f"{stats['longest_duration']} min")
-            c4.metric('Maximum Temperature', f"{stats['max_temperature']} °C")
-
-            st.header('📝 Insurance Claim Recommendation')
-            if stats['max_temperature'] > 10:
+            if missing_columns:
                 st.error(
-                    'Claim Recommended: Temperature exceeded critical cold-chain limits.'
-                )
-            elif stats['max_temperature'] > 8:
-                st.warning(
-                    'Moderate Risk Detected: Manual inspection recommended before claim decision.'
+                    f'Missing required dataset columns: {", ".join(missing_columns)}'
                 )
             else:
-                st.success('Low Risk Shipment: No insurance claim required.')
+                df = prepare_timestamp(df)
+                df = clean_data(df)
+                df = create_features(df)
 
-            st.header('📋 Excursion Details')
-            if not excursion_df.empty:
-                st.dataframe(excursion_df, use_container_width=True)
-            else:
-                st.success('No temperature excursions detected.')
+                summary = get_summary(df)
+                excursions = detect_excursions(df)
+                stats = get_excursion_statistics(excursions)
+                excursion_df = pd.DataFrame(excursions)
 
-            st.header('📈 Visual Analytics')
-            st.plotly_chart(temperature_graph(df), use_container_width=True)
-            st.plotly_chart(humidity_graph(df), use_container_width=True)
-            st.plotly_chart(health_index_graph(df), use_container_width=True)
-            st.plotly_chart(temperature_distribution(df), use_container_width=True)
-            st.plotly_chart(route_analysis(df), use_container_width=True)
-            st.plotly_chart(product_analysis(df), use_container_width=True)
+                st.header('📊 Dataset Summary')
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric('Records', summary['records'])
+                c2.metric('Average Temp', f"{summary['avg_temp']} °C")
+                c3.metric('Average Humidity', f"{summary['avg_humidity']} %")
+                c4.metric('Average Health Index', summary['avg_health'])
 
-    except Exception as e:
-        st.error(f'Application Error: {e}')
+                st.header('🚨 Breach Dashboard')
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric('Total Excursions', stats['total_excursions'])
+                c2.metric('Average Duration', f"{stats['avg_duration']} min")
+                c3.metric('Longest Duration', f"{stats['longest_duration']} min")
+                c4.metric('Maximum Temperature', f"{stats['max_temperature']} °C")
+
+                st.header('📝 Insurance Claim Recommendation')
+                if stats['max_temperature'] > 10:
+                    st.error(
+                        'Claim Recommended: Temperature exceeded critical cold-chain limits.'
+                    )
+                elif stats['max_temperature'] > 8:
+                    st.warning(
+                        'Moderate Risk Detected: Manual inspection recommended before claim decision.'
+                    )
+                else:
+                    st.success('Low Risk Shipment: No insurance claim required.')
+
+                st.header('📋 Excursion Details')
+                if not excursion_df.empty:
+                    st.dataframe(excursion_df, use_container_width=True)
+
+                    report_dir = Path('reports')
+                    report_dir.mkdir(exist_ok=True)
+
+                    fda_report = '\n\n'.join(
+                        generate_fda_report(excursion) for excursion in excursions
+                    )
+                    insurance_claim = '\n\n'.join(
+                        generate_insurance_claim(excursion) for excursion in excursions
+                    )
+
+                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                    fda_file = report_dir / f'FDA_Report_{timestamp}.txt'
+                    claim_file = report_dir / f'Insurance_Claim_{timestamp}.txt'
+                    fda_file.write_text(fda_report, encoding='utf-8')
+                    claim_file.write_text(insurance_claim, encoding='utf-8')
+
+                    st.subheader('Download Reports')
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.download_button(
+                            'Download FDA Report',
+                            fda_report,
+                            file_name=fda_file.name,
+                            mime='text/plain',
+                            use_container_width=True,
+                        )
+                    with col2:
+                        st.download_button(
+                            'Download Insurance Claim',
+                            insurance_claim,
+                            file_name=claim_file.name,
+                            mime='text/plain',
+                            use_container_width=True,
+                        )
+
+                    st.markdown(
+                        f'Saved locally to `{fda_file.resolve()}` and `{claim_file.resolve()}`.'
+                    )
+                else:
+                    st.success('No temperature excursions detected.')
+
+                st.header('📈 Visual Analytics')
+                st.plotly_chart(temperature_graph(df), use_container_width=True)
+                st.plotly_chart(humidity_graph(df), use_container_width=True)
+                st.plotly_chart(health_index_graph(df), use_container_width=True)
+                st.plotly_chart(temperature_distribution(df), use_container_width=True)
+                st.plotly_chart(route_analysis(df), use_container_width=True)
+                st.plotly_chart(product_analysis(df), use_container_width=True)
+
+        except Exception as e:
+            st.error(f'Application Error: {e}')
