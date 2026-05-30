@@ -6,11 +6,6 @@ from pathlib import Path
 from utils.data_loader import load_data, validate_columns, prepare_timestamp
 from utils.data_cleaner import clean_data, create_features, get_summary
 from utils.breach_detector import detect_excursions, get_excursion_statistics
-from utils.llm_service import (
-    llm_available,
-    generate_llm_fda_report,
-    generate_llm_insurance_claim,
-)
 from utils.report_generator import generate_fda_report
 from utils.insurance_generator import generate_insurance_claim
 from utils.docx_generator import save_docx
@@ -27,14 +22,6 @@ st.set_page_config(
     page_title='Cold Chain Breach Alert & Insurance Claim Assistant',
     layout='wide',
 )
-
-with st.sidebar:
-    st.header('⚙️ Configuration')
-    api_key = st.text_input(
-        'OpenAI API Key (optional)',
-        type='password',
-        help='Enter your OpenAI API key to enable LLM-enhanced reports.',
-    )
 
 st.markdown("""
 # ❄️ Cold Chain Breach Alert & Insurance Claim Assistant
@@ -53,15 +40,6 @@ uploaded_file = st.file_uploader(
 
 if uploaded_file is not None:
     st.success('File uploaded successfully. Click Analyze to begin breach and claim analysis.')
-    use_llm = st.checkbox('Use OpenAI LLM for enhanced reports', value=False)
-    if use_llm:
-        if not llm_available(api_key):
-            st.warning(
-                'OpenAI API Key not found. The app will fall back to local report templates. '
-                'Enter your API key in the Configuration sidebar to enable LLM features.'
-            )
-        else:
-            st.success('✅ LLM is ready! Enhanced reports will be generated.')
     analyze_clicked = st.button('Analyze Dataset')
 
     if analyze_clicked:
@@ -116,20 +94,12 @@ if uploaded_file is not None:
                     report_dir = Path('reports')
                     report_dir.mkdir(exist_ok=True)
 
-                    if use_llm and llm_available(api_key):
-                        fda_report = '\n\n'.join(
-                            generate_llm_fda_report(excursion, api_key) for excursion in excursions
-                        )
-                        insurance_claim = '\n\n'.join(
-                            generate_llm_insurance_claim(excursion, api_key) for excursion in excursions
-                        )
-                    else:
-                        fda_report = '\n\n'.join(
-                            generate_fda_report(excursion) for excursion in excursions
-                        )
-                        insurance_claim = '\n\n'.join(
-                            generate_insurance_claim(excursion) for excursion in excursions
-                        )
+                    fda_report = '\n\n'.join(
+                        generate_fda_report(excursion) for excursion in excursions
+                    )
+                    insurance_claim = '\n\n'.join(
+                        generate_insurance_claim(excursion) for excursion in excursions
+                    )
 
                     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
                     fda_file = report_dir / f'FDA_Report_{timestamp}.docx'
@@ -138,27 +108,26 @@ if uploaded_file is not None:
                     save_docx(fda_report, str(fda_file))
                     save_docx(insurance_claim, str(claim_file))
 
-                    fda_bytes = fda_file.read_bytes()
-                    claim_bytes = claim_file.read_bytes()
-
                     st.subheader('Download Reports')
                     col1, col2 = st.columns(2)
                     with col1:
-                        st.download_button(
-                            'Download FDA Report',
-                            fda_bytes,
-                            file_name=fda_file.name,
-                            mime='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                            use_container_width=True,
-                        )
+                        with open(fda_file, 'rb') as f:
+                            st.download_button(
+                                'Download FDA Report',
+                                f.read(),
+                                file_name=fda_file.name,
+                                mime='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                                use_container_width=True,
+                            )
                     with col2:
-                        st.download_button(
-                            'Download Insurance Claim',
-                            claim_bytes,
-                            file_name=claim_file.name,
-                            mime='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                            use_container_width=True,
-                        )
+                        with open(claim_file, 'rb') as f:
+                            st.download_button(
+                                'Download Insurance Claim',
+                                f.read(),
+                                file_name=claim_file.name,
+                                mime='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                                use_container_width=True,
+                            )
 
                     st.markdown(
                         f'Saved locally to `{fda_file.resolve()}` and `{claim_file.resolve()}`.'
